@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Results (large files)
+results/tables/
+results/figures/*.png
+results/figures/*.pdf
+results/**/*.npy
+results/**/*.json
+!results/.gitkeep
+!results/figures/.gitkeep
+
+# Model weights and checkpoints
+*.bin
+*.safetensors
+*.pt
+*.ckpt
+checkpoints/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Cluster / local paths
+local/
+*.sbatch.local
+
+# Logs
+logs/
+*.log
+slurm-*.out
+
+# Data
+data/
+*.parquet
+*.arrow
+
+# IDE
+.vscode/
+.idea/

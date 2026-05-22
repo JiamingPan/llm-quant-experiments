@@ -1,0 +1,36 @@
+model:
+  name: Qwen/Qwen3-8B
+  trust_remote_code: true
+  torch_dtype: float16
+  device_map: auto
+
+quantization:
+  bits: 2
+  group_size: 128
+  symmetric: false
+
+detection:
+  uo:
+    fp16_ppl_budget: 0.005
+    packet_size: 1
+    max_candidates_per_layer: 500
+  sw:
+    percentile: 99.99
+
+calibration:
+  dataset: wikitext
+  dataset_config: wikitext-2-raw-v1
+  split: train
+  n_samples: 128
+  max_length: 512
+
+eval:
+  dataset: wikitext
+  dataset_config: wikitext-2-raw-v1
+  split: test
+  max_length: 512
+
+output:
+  dir: results/
+  uo_candidates: results/uo_candidates_8b.json
+  diagnostics_plot: results/figures/depthwise_8b.png
