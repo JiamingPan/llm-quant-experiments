@@ -3,7 +3,7 @@ CLI entry point: depthwise diagnostic plots.
 
 Usage:
     python scripts/run_diagnostics.py --config configs/qwen3_1b7.yaml
-    python scripts/run_diagnostics.py --model-name Qwen/Qwen3-1.7B \
+    python scripts/run_diagnostics.py --model-name /path/to/local/qwen3 \
         --uo-path results/uo_candidates.json \
         --output results/figures/depthwise_1b7.png
 
@@ -21,13 +21,17 @@ Pipeline:
 """
 
 import argparse
+import copy
+import json
+import torch
 import yaml
+from pathlib import Path
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Depthwise diagnostics for quantized LLMs")
     parser.add_argument("--config", type=str, default=None)
-    parser.add_argument("--model-name", type=str, default="Qwen/Qwen3-1.7B")
+    parser.add_argument("--model-name", type=str, default=None)
     parser.add_argument("--bits", type=int, default=2)
     parser.add_argument("--group-size", type=int, default=128)
     parser.add_argument("--uo-path", type=str, default=None,
@@ -43,10 +47,81 @@ def main():
     cfg = {}
     if args.config:
         with open(args.config) as f:
-            cfg = yaml.safe_load(f)
+            cfg = yaml.safe_load(f) or {}
 
-    # TODO (Codex): implement the full pipeline described in the docstring above
-    raise NotImplementedError("TODO: implement main() in Codex")
+    model_cfg = cfg.get("model", {})
+    quant_cfg = cfg.get("quantization", {})
+    output_cfg = cfg.get("output", {})
+
+    model_name = model_cfg.get("name") or args.model_name
+    if model_name is None:
+        raise ValueError("Provide --config with model.name or pass --model-name")
+    bits = quant_cfg.get("bits", args.bits)
+    group_size = quant_cfg.get("group_size", args.group_size)
+    output_path = output_cfg.get("diagnostics_plot", args.output)
+    trust_remote_code = model_cfg.get("trust_remote_code", False)
+    device_map = model_cfg.get("device_map", "auto")
+
+    from datasets import load_dataset
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from quant_analysis.diagnostics import compute_depthwise_diagnostics, plot_depthwise_comparison
+    from quant_analysis.quantize import quantize_model_weights
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map=device_map,
+        trust_remote_code=trust_remote_code,
+    )
+    model.eval()
+
+    quant_results = quantize_model_weights(model, bits=bits, group_size=group_size)
+    model_q = copy.deepcopy(model)
+    with torch.no_grad():
+        for layer_name, (W_q, scales, zero_points, W_int) in quant_results.items():
+            weight = model_q.get_submodule(layer_name).weight.data
+            weight.copy_(W_q.to(device=weight.device, dtype=weight.dtype))
+    model_q.eval()
+
+    model_q_uo = copy.deepcopy(model_q)
+    if args.uo_path:
+        with open(args.uo_path) as f:
+            admitted_uos = json.load(f)
+        with torch.no_grad():
+            for item in admitted_uos:
+                layer_name = item["layer"]
+                row = item["row"]
+                col = item["col"]
+                weight = model_q_uo.get_submodule(layer_name).weight.data
+                weight[row, col] = torch.as_tensor(0.0, device=weight.device, dtype=weight.dtype)
+    model_q_uo.eval()
+
+    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    raw_text = "\n\n".join(t for t in ds["text"] if t.strip())
+    token_ids = tokenizer(raw_text, add_special_tokens=False)["input_ids"][:200]
+    text = tokenizer.decode(token_ids)
+
+    d1 = compute_depthwise_diagnostics(model, tokenizer, text, device=args.device)
+    d2 = compute_depthwise_diagnostics(model_q, tokenizer, text, device=args.device)
+    d3 = compute_depthwise_diagnostics(model_q_uo, tokenizer, text, device=args.device)
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    plot_depthwise_comparison(
+        {"fp16": d1, "w2_baseline": d2, "w2_uo": d3},
+        labels=["FP16", f"W{bits} baseline", f"W{bits} + UO zeroed"],
+        save_path=output_path,
+    )
+
+    for name, diagnostics in [("fp16", d1), ("w2_baseline", d2), ("w2_uo", d3)]:
+        n_layers = diagnostics["n_layers"]
+        layer_indices = [0, n_layers // 2, n_layers - 1]
+        mean_bos_norm = sum(diagnostics["bos_norm"][idx] for idx in layer_indices) / len(layer_indices)
+        mean_sink_score = sum(diagnostics["sink_score"][idx] for idx in layer_indices) / len(layer_indices)
+        print(
+            f"{name}: layers {layer_indices} | "
+            f"mean bos_norm={mean_bos_norm:.6f} | mean sink_score={mean_sink_score:.6f}"
+        )
 
 
 if __name__ == "__main__":

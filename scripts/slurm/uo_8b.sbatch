@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=uo_qwen3_8b
 #SBATCH --partition=spgpu
-#SBATCH --account=YOUR_ACCOUNT       # edit: e.g. huterer0
+#SBATCH --account=huterer0
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -16,7 +16,7 @@
 module load cuda
 conda activate quant           # edit: your env name
 
-REPO=/path/to/llm-quant-experiments   # edit: your cluster path
+REPO=/scratch/huterer_root/huterer0/jiamingp/llm-quant-experiments
 cd $REPO
 
 mkdir -p logs results/figures

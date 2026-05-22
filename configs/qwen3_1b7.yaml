@@ -1,5 +1,5 @@
 model:
-  name: Qwen/Qwen3-1.7B
+  name: /scratch/huterer_root/huterer0/jiamingp/models/qwen3-1b7
   trust_remote_code: true
   torch_dtype: float16
   device_map: auto

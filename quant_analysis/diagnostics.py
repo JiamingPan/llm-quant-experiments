@@ -31,6 +31,22 @@ import matplotlib.pyplot as plt
 from typing import Optional
 
 
+def _model_device(model, requested=None):
+    try:
+        param_device = next(model.parameters()).device
+        if param_device.type != "meta":
+            return param_device
+    except StopIteration:
+        pass
+
+    if requested is not None:
+        device = torch.device(requested)
+        if device.type != "cuda" or torch.cuda.is_available():
+            return device
+
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def compute_depthwise_diagnostics(
     model,
     tokenizer,
@@ -61,7 +77,68 @@ def compute_depthwise_diagnostics(
         Use output_attentions=True for sink_score.
         Remove all hooks in finally block.
     """
-    raise NotImplementedError("TODO: implement in Codex")
+    input_device = _model_device(model, device)
+    enc = tokenizer(text, return_tensors="pt", add_special_tokens=True)
+    input_ids = enc["input_ids"].to(input_device)
+    attention_mask = enc.get("attention_mask")
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(input_device)
+
+    layers = model.model.layers if hasattr(model, "model") and hasattr(model.model, "layers") else model.layers
+    n_layers = len(layers)
+    hidden_states = [None] * n_layers
+    handles = []
+    was_training = model.training
+    model.eval()
+
+    def make_hook(idx):
+        def hook(module, inputs, output):
+            hidden_state = output[0] if isinstance(output, (tuple, list)) else output
+            hidden_states[idx] = hidden_state.detach()
+        return hook
+
+    try:
+        for idx, layer in enumerate(layers):
+            handles.append(layer.register_forward_hook(make_hook(idx)))
+
+        kwargs = {"input_ids": input_ids, "output_attentions": True}
+        if attention_mask is not None:
+            kwargs["attention_mask"] = attention_mask
+        with torch.no_grad():
+            outputs = model(**kwargs)
+    finally:
+        for handle in handles:
+            handle.remove()
+        model.train(was_training)
+
+    attentions = outputs.attentions if hasattr(outputs, "attentions") else outputs[-1]
+    bos_norm = []
+    sink_score = []
+    rep_entropy = []
+
+    for idx in range(n_layers):
+        hs = hidden_states[idx]
+        attn = attentions[idx]
+
+        bos_norm.append(float(hs[0, 0, :].float().norm().item()))
+
+        bos_attention = attn[0, :, :, 0].float()
+        sink_score.append(float(bos_attention.max(dim=-1).values.mean().item()))
+
+        singular_values = torch.linalg.svd(hs[0].float(), full_matrices=False).S
+        denom = singular_values.sum()
+        if denom.item() == 0:
+            rep_entropy.append(0.0)
+        else:
+            rep_entropy.append(float((singular_values[0] / denom).item()))
+
+    return {
+        "bos_norm": bos_norm,
+        "sink_score": sink_score,
+        "rep_entropy": rep_entropy,
+        "n_layers": n_layers,
+        "n_tokens": int(input_ids.shape[1]),
+    }
 
 
 def plot_depthwise_comparison(
@@ -85,7 +162,28 @@ def plot_depthwise_comparison(
         Panel 3: rep_entropy vs layer
         Legend in panel 1.
     """
-    raise NotImplementedError("TODO: implement in Codex")
+    signals = [
+        ("bos_norm", "BOS Token Norm"),
+        ("sink_score", "Attention Sink Score"),
+        ("rep_entropy", "Representation Entropy (σ₁/Σσ)"),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharex=True)
+
+    for ax, (signal, title) in zip(axes, signals):
+        for (key, diagnostics), label in zip(diagnostics_dict.items(), labels):
+            values = diagnostics[signal]
+            ax.plot(range(len(values)), values, label=label)
+        ax.set_title(title)
+        ax.set_xlabel("Layer")
+        ax.set_ylabel(signal)
+
+    axes[0].legend()
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        plt.close(fig)
+    else:
+        plt.show()
 
 
 def compute_alpha_sweep(
@@ -117,4 +215,27 @@ def compute_alpha_sweep(
     """
     if alphas is None:
         alphas = [0.8, 0.9, 1.0, 1.1, 1.2]
-    raise NotImplementedError("TODO: implement in Codex")
+    from .metrics import compute_delta_ppl, compute_perplexity
+
+    if baseline_ppl is None:
+        baseline_ppl = compute_perplexity(model, tokenizer, texts)
+
+    results = {}
+    for alpha in alphas:
+        interventions = {}
+        for layer_name, row, col, original_fp16_value in sw_locations:
+            interventions[(layer_name, row, col)] = alpha * original_fp16_value
+
+        delta = compute_delta_ppl(
+            model,
+            tokenizer,
+            texts,
+            interventions,
+            baseline_ppl=baseline_ppl,
+        )
+        results[alpha] = {
+            "ppl": float(delta["patched_ppl"]),
+            "delta_ppl": float(delta["delta_ppl"]),
+        }
+
+    return results
