@@ -1,121 +1,125 @@
-# llm-quant-experiments
+# Weight Handles
 
-Experimental tools for studying **Super Weights (SWs)** and **Under-Outliers (UOs)** as scalar mechanisms in Qwen3 language models.
+This repository studies individual scalar weights as mechanistic handles on transformer computation. The working question is:
 
-The core idea is interpretability-first: individual weight coordinates can sometimes act like unusually important control points in a transformer. This repository uses controlled scalar edits and forward-pass diagnostics to identify those weights and measure their effects on model behavior and internal activations.
+> Which single coordinates in a language model act as causal write-points into reusable internal features, and which large coordinates are visually extreme but functionally weak?
 
-## Research Questions
+The code implements the experimental program behind **Weight Outliers as Information Handles**. It uses public Hugging Face models, forward passes, activation hooks, temporary scalar edits, and residual-stream patching to separate functional outliers from matched controls.
 
-1. **Which individual weights are load-bearing?**
-   Super Weights are rare scalar outliers, often in `mlp.down_proj`, whose ablation can sharply damage model quality.
+## Core Ideas
 
-2. **Which large weights are not functionally important?**
-   Under-Outliers are large scalar coordinates that can dominate local numerical geometry while contributing little to the model's original behavior. They are useful negative controls for separating magnitude from mechanism.
+**Super Weights** are rare scalar coordinates whose deletion causes measurable behavioral damage. They are treated as positive controls for live internal routes.
 
-3. **Can scalar edits explain internal trajectories?**
-   The project compares depthwise signals such as BOS token norm, attention-sink score, and residual-stream concentration before and after targeted scalar interventions.
+**Under-Outliers** are large scalar coordinates whose deletion has low causal damage. They are treated as negative controls for separating magnitude from mechanism.
 
-4. **Can we distinguish useful from not-useful weights?**
-   SWs and UOs can be viewed as opposite cases: SWs are high-causal-damage weights that should be protected or studied, while useful UOs are low-causal-damage weights whose presence can make the model more fragile under perturbation.
+**Shadow Outliers** are coordinates that look weak alone but matter jointly with nearby or related coordinates.
 
-## What This Code Does
+**Silent Stabilizers** and **Obsolete Anchors** are low-damage coordinates that still leave structured residual traces, suggesting a possible stabilizing or historical role.
 
-**Super Weight detection** scans model weights for rare scalar outliers, especially in `mlp.down_proj`, and tests whether they are causally important.
+## Causal Feature-Handle Test
 
-**Under-Outlier detection** finds range-frontier scalar candidates, then admits a candidate only if deleting it is harmless to the original model and useful under a controlled perturbation.
+The main experiment has four stages:
 
-**Forward metrics** measure PPL, delta-PPL, KL divergence, and argmax agreement between original and perturbed models.
+1. **Candidate selection**
+   - known Super Weight coordinates from config lists, following Yu et al. 2024 ([arXiv:2411.07191](https://arxiv.org/abs/2411.07191))
+   - top robust-magnitude coordinates using `|w - median(W)| / (MAD(W) + eps)`
+   - functional Under-Outlier candidates with low forward-pass damage
+   - matched controls selected by layer, matrix type, row norm, column norm, and optional activation statistics
 
-**Depthwise diagnostics** collect per-layer signals:
+2. **Behavioral ablation**
+   - zero one coordinate or a coordinate set
+   - compare teacher and edited model distributions with conditional KL
+   - report mean KL, tail/CVaR KL, top-token flip rate, logit-margin change, and perplexity change
 
-- BOS token hidden-state norm
-- attention mass on the BOS token
-- top singular-value fraction of the residual stream
+3. **Residual-stream tracking**
+   - hook transformer layers
+   - measure the induced residual perturbation
+   - compute the top principal direction and stability score `lambda_1 / (sum lambda + eps)`
 
-**Alpha sweeps** scale selected Super Weights to test whether exact scalar restoration is optimal, or whether the surrounding perturbed computation prefers a different scalar value.
+4. **Patch-back and spreadability**
+   - delete a coordinate
+   - patch the lost residual perturbation back
+   - test whether behavior is recovered by full residual patching, rank-one patching, nearby distributed edits, or channel scaling
 
-## Conceptual Framing
+## Prompt Strata
 
-The project treats a weight intervention as a probe:
+Experiments evaluate candidates across deterministic public prompt strata:
 
-```text
-zero, preserve, or rescale one scalar -> measure behavioral and internal change
-```
+- prose
+- code
+- math
+- chat
+- long-context
+- separators/BOS
+- sentinel prompts
 
-For UOs, the working admission rule is:
-
-```text
-useful UO = original-model-harmless + perturbation-useful
-```
-
-For SWs, the working rule is the opposite:
-
-```text
-super weight = high-damage scalar that must be protected or studied
-```
-
-This makes SWs and UOs a pair of positive and negative controls for studying information transport in LLMs. SWs point toward live scalar routes; UOs point toward large but weak or abandoned scalar routes that can still affect numerical representations.
+These strata are intentionally small by default so the pipeline is easy to inspect and extend.
 
 ## Setup
 
 ```bash
-git clone https://github.com/JiamingPan/llm-quant-experiments.git
-cd llm-quant-experiments
+cd <repo>
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The scripts use Hugging Face `AutoModelForCausalLM` and `AutoTokenizer`. `model.name` in each config can be either a Hugging Face model ID or a local model directory.
-
 ## Usage
 
-**Detect UO candidates:**
+Run the full Causal Feature-Handle Test:
 
 ```bash
-python scripts/run_uo_detection.py --config configs/qwen3_1b7.yaml
-python scripts/run_uo_detection.py --config configs/qwen3_8b.yaml
-```
-
-**Run depthwise diagnostics:**
-
-```bash
-python scripts/run_diagnostics.py \
+python scripts/run_feature_handle_test.py \
     --config configs/qwen3_1b7.yaml \
-    --uo-path results/uo_candidates_1b7.json \
-    --output results/figures/depthwise_1b7.png
+    --output results/feature_handles_1b7.json
 ```
 
-**SLURM:**
+Track residual perturbations for the highest-damage candidates:
 
 ```bash
-sbatch scripts/slurm/uo_1b7.sbatch
-sbatch scripts/slurm/uo_8b.sbatch
+python scripts/run_residual_tracking.py \
+    --config configs/qwen3_1b7.yaml \
+    --candidates results/feature_handles_1b7.json \
+    --output results/residual_tracking_1b7.json
 ```
 
-Edit the config and SLURM paths for your local cluster environment before submitting jobs.
+Create a taxonomy table and summary figure:
 
-## Repository Layout
+```bash
+python scripts/make_report.py \
+    --input results/feature_handles_1b7.json \
+    --table results/tables/feature_handle_taxonomy_1b7.csv \
+    --figure results/figures/feature_handle_taxonomy_1b7.png
+```
+
+## Layout
 
 ```text
-quant_analysis/
-    quantize.py      controlled numeric perturbation utilities
-    detect.py        SW and UO scalar candidate detection
-    metrics.py       PPL, delta-PPL, KL, EAR, and admission gates
-    diagnostics.py   BOS norm, attention sink score, residual concentration curves
+weight_handles/
+    candidates.py     candidate selection
+    ablation.py       coordinate and set ablation
+    residual.py       residual-stream hooks and perturbation tracking
+    patching.py       patch-back, rank-one patch, spreadability tests
+    strata.py         deterministic public prompt strata
+    metrics.py        KL, tail/CVaR KL, token flips, margins, perplexity
+    taxonomy.py       intervention-result taxonomy
 scripts/
-    run_uo_detection.py   candidate discovery and admission pipeline
-    run_diagnostics.py    depthwise comparison plots
-    slurm/                example batch scripts
+    run_feature_handle_test.py
+    run_residual_tracking.py
+    make_report.py
 configs/
     qwen3_1b7.yaml
     qwen3_8b.yaml
+tests/
+    unit tests for metrics, ablation, and patching
 results/
-    local outputs, ignored by git
+    generated artifacts
 ```
 
-## Status
+## Reproducibility
 
-This is an exploratory research repo. The current code is meant to support experiments and generate evidence, not to present final claims about Super Weights, Under-Outliers, or transformer mechanisms.
+The code is forward-pass only. It does not require gradient-based detectors. Candidate lists are deterministic under fixed seeds, YAML configs, and public model identifiers.
 
 ## References
 
-- Yu et al. 2024 — Super Weights ([arXiv:2411.07191](https://arxiv.org/abs/2411.07191))
+- Yu et al. 2024, **Super Weights**, [arXiv:2411.07191](https://arxiv.org/abs/2411.07191)
