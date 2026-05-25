@@ -1,8 +1,8 @@
 """
-quant_analysis: forward-pass LLM quantization analysis toolkit.
+quant_analysis: forward-pass scalar interpretability tools for SW/UO studies.
 
 Modules:
-    quantize    - asymmetric group quantization (W2/W3, group_size=128)
+    quantize    - group quantization perturbations used to expose scalar effects
     detect      - range-frontier UO detection, super weight detection
     metrics     - delta-PPL, KL divergence, EAR, UO admission gating
     diagnostics - depthwise BOS norm, attention sink score, rep entropy

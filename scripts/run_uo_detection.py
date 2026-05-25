@@ -33,7 +33,7 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="UO detection for quantized LLMs")
+    parser = argparse.ArgumentParser(description="UO scalar mechanism detection for Qwen3")
     parser.add_argument("--config", type=str, default=None,
                         help="Path to YAML config (overrides other flags if given)")
     parser.add_argument("--model-name", type=str, default=None)
@@ -67,6 +67,9 @@ def main():
         raise ValueError("Provide --config with model.name or pass --model-name")
     bits = quant_cfg.get("bits", args.bits)
     group_size = quant_cfg.get("group_size", args.group_size)
+    dataset_name = calibration_cfg.get("dataset", "Salesforce/wikitext")
+    dataset_config = calibration_cfg.get("dataset_config", "wikitext-2-raw-v1")
+    dataset_split = calibration_cfg.get("split", "train")
     n_samples = calibration_cfg.get("n_samples", args.n_samples)
     fp16_budget = uo_cfg.get("fp16_ppl_budget", args.fp16_budget)
     max_candidates_per_layer = uo_cfg.get("max_candidates_per_layer", None)
@@ -90,7 +93,7 @@ def main():
     )
     model.eval()
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+    ds = load_dataset(dataset_name, dataset_config, split=dataset_split)
     texts = [t for t in ds["text"] if len(t.strip()) > 50][:n_samples]
 
     baseline_fp16_ppl = compute_perplexity(model, tokenizer, texts)

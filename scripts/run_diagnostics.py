@@ -29,7 +29,7 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Depthwise diagnostics for quantized LLMs")
+    parser = argparse.ArgumentParser(description="Depthwise SW/UO interpretability diagnostics")
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--model-name", type=str, default=None)
     parser.add_argument("--bits", type=int, default=2)
@@ -51,6 +51,7 @@ def main():
 
     model_cfg = cfg.get("model", {})
     quant_cfg = cfg.get("quantization", {})
+    eval_cfg = cfg.get("eval", {})
     output_cfg = cfg.get("output", {})
 
     model_name = model_cfg.get("name") or args.model_name
@@ -58,6 +59,9 @@ def main():
         raise ValueError("Provide --config with model.name or pass --model-name")
     bits = quant_cfg.get("bits", args.bits)
     group_size = quant_cfg.get("group_size", args.group_size)
+    dataset_name = eval_cfg.get("dataset", "Salesforce/wikitext")
+    dataset_config = eval_cfg.get("dataset_config", "wikitext-2-raw-v1")
+    dataset_split = eval_cfg.get("split", "test")
     output_path = output_cfg.get("diagnostics_plot", args.output)
     trust_remote_code = model_cfg.get("trust_remote_code", False)
     device_map = model_cfg.get("device_map", "auto")
@@ -97,7 +101,7 @@ def main():
                 weight[row, col] = torch.as_tensor(0.0, device=weight.device, dtype=weight.dtype)
     model_q_uo.eval()
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    ds = load_dataset(dataset_name, dataset_config, split=dataset_split)
     raw_text = "\n\n".join(t for t in ds["text"] if t.strip())
     token_ids = tokenizer(raw_text, add_special_tokens=False)["input_ids"][:200]
     text = tokenizer.decode(token_ids)

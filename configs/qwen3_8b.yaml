@@ -18,14 +18,14 @@ detection:
     percentile: 99.99
 
 calibration:
-  dataset: wikitext
+  dataset: Salesforce/wikitext
   dataset_config: wikitext-2-raw-v1
   split: train
   n_samples: 128
   max_length: 512
 
 eval:
-  dataset: wikitext
+  dataset: Salesforce/wikitext
   dataset_config: wikitext-2-raw-v1
   split: test
   max_length: 512

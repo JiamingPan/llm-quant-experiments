@@ -16,7 +16,7 @@
 module load cuda
 conda activate quant           # edit: your env name
 
-REPO=/scratch/huterer_root/huterer0/jiamingp/llm-quant-experiments
+REPO=/home/jiamingp/llm-quant-experiments
 cd $REPO
 
 mkdir -p logs results/figures
