@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=uo_qwen3_8b
 #SBATCH --partition=spgpu
-#SBATCH --account=huterer0
+#SBATCH --account=YOUR_ACCOUNT
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -10,13 +10,14 @@
 #SBATCH --time=06:00:00
 #SBATCH --output=logs/uo_8b_%j.out
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jiamingp@umich.edu
+#SBATCH --mail-user=YOUR_EMAIL
 
 # ---- environment ----
 module load cuda
 conda activate quant           # edit: your env name
+export PYTHONNOUSERSITE=1
 
-REPO=/home/jiamingp/llm-quant-experiments
+REPO=$HOME/llm-quant-experiments
 cd $REPO
 
 mkdir -p logs results/figures

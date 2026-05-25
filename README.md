@@ -1,88 +1,74 @@
 # llm-quant-experiments
 
-Private early research code for studying **Super Weights (SWs)** and **Under-Outliers (UOs)** as interpretable scalar mechanisms in Qwen3 language models.
+Experimental tools for studying **Super Weights (SWs)** and **Under-Outliers (UOs)** as scalar mechanisms in Qwen3 language models.
 
-The working hypothesis is that a small number of individual weight coordinates can have outsized, mechanistically meaningful effects on model behavior. Quantization is used here as a controlled stress test: when low-bit compression perturbs a model, the weights that dominate group ranges, preserve attention sinks, or recover perplexity become useful probes into the model's internal computation.
+The core idea is interpretability-first: individual weight coordinates can sometimes act like unusually important control points in a transformer. This repository uses controlled perturbations, including low-bit group quantization and targeted scalar edits, to identify those weights and measure their effects on model behavior and internal activations.
 
-This repository should stay private while the SW/UO detection framework, calibration recipe, and interpretation claims are still being validated.
+Quantization is not the main claim of the project. It is a useful experimental stressor: when a perturbation changes the model, the weights that dominate group ranges, preserve attention-sink behavior, or recover perplexity become candidates for mechanistic study.
 
-## Research Framing
-
-This project is not mainly a deployment quantization repo. It uses quantization because it creates a measurable perturbation that exposes unusually important scalar weights. The near-term goal is a stronger detection framework for useful and not-useful weights under low-bit quantization.
-
-The central questions are:
+## Research Questions
 
 1. **Which individual weights are load-bearing?**
-   Super Weights are rare scalar outliers, especially in `mlp.down_proj`, whose ablation can sharply damage model quality.
+   Super Weights are rare scalar outliers, often in `mlp.down_proj`, whose ablation can sharply damage model quality.
 
-2. **Which weights distort local numerical geometry?**
-   Under-Outliers sit at the max/min frontier of a quantization group. They can dominate the group range while contributing little to FP16 behavior, making them useful probes for separating numerical artifacts from functional computation.
+2. **Which large weights are not functionally important?**
+   Under-Outliers can dominate the numerical range of a local group while contributing little to the FP16 model's behavior. They are useful negative controls for separating magnitude from mechanism.
 
-3. **Can we classify weights by causal damage and quantization cost?**
-   A Super Weight is high damage if removed and should be protected. A useful UO is low damage if removed but high cost if kept in the quantization grid.
+3. **Can scalar edits explain internal trajectories?**
+   The project compares depthwise signals such as BOS token norm, attention-sink score, and residual-stream compression before and after targeted scalar interventions.
 
-4. **Do SW/UO interventions restore internal trajectories?**
-   Depthwise diagnostics compare BOS token norm, attention sink score, and residual-stream compression across FP16, low-bit baseline, and UO-zeroed variants.
-
-5. **Can scalar edits reveal mechanism rather than only improve PPL?**
-   PPL, KL, and EAR are treated as external checks. The more interesting signal is whether small scalar interventions recover recognizable internal structure.
+4. **Can we distinguish useful from not-useful weights?**
+   SWs and UOs can be viewed as opposite cases: SWs are high-causal-damage weights that should be protected, while useful UOs are low-causal-damage weights whose presence can make perturbations worse.
 
 ## What This Code Does
 
-**Range-frontier UO detection** finds weights that determine a group's dynamic range. A candidate is admitted only if zeroing it is FP16-harmless and improves the quantized model.
+**Super Weight detection** scans model weights for rare scalar outliers, especially in `mlp.down_proj`, and tests whether they are causally important.
 
-**Super Weight detection** scans `mlp.down_proj` matrices for extreme scalar outliers that should be protected or studied rather than zeroed.
+**Under-Outlier detection** finds range-frontier weights that affect the local quantization group scale, then admits a candidate only if deleting it is FP16-harmless and useful under the perturbation.
 
-**Depthwise diagnostics** compare per-layer signals:
+**Forward metrics** measure PPL, delta-PPL, KL divergence, and argmax agreement between original and perturbed models.
+
+**Depthwise diagnostics** collect per-layer signals:
 
 - BOS token hidden-state norm
 - attention mass on the BOS token
 - top singular-value fraction of the residual stream
 
-These curves test whether an intervention changes the internal computation in a coherent way.
+**Alpha sweeps** scale selected Super Weights to test whether exact restoration is optimal, or whether the surrounding perturbed computation prefers a different scalar value.
 
-**Alpha sweeps** scale known Super Weights by `alpha` to test whether exact FP16 restoration is optimal, or whether the perturbed downstream computation prefers a different scalar value.
+## Conceptual Framing
 
-## Current Detector Direction
-
-The intended detector is forward-only and endpoint-based:
-
-1. Use the actual production quantization groups.
-2. Shortlist range-frontier weights that affect group scale.
-3. Reject candidates that damage FP16 behavior.
-4. Admit only candidates that improve the final quantized model.
-5. Veto or stress-test candidates near known SW routes, sink-token behavior, or long-context-sensitive features.
-
-This is deliberately different from ranking weights only by magnitude, gradient, or Hessian proxy. The working criterion is:
+The project treats a weight intervention as a probe:
 
 ```text
-useful UO = FP16-harmless + quantization-useful
+zero, preserve, or rescale one scalar -> measure behavioral and internal change
 ```
 
-The framework can also be viewed as a residual decomposition:
+For UOs, the working admission rule is:
 
 ```text
-W_fp16 - W_q = SW-protected residual + UO-zeroed residual + normal quantized residual
+useful UO = FP16-harmless + perturbation-useful
 ```
 
-The open question is whether the remaining residual has structure, such as channel concentration, low-rank directions, or sink-token-specific distortion.
+For SWs, the working rule is the opposite:
+
+```text
+super weight = high-damage scalar that must be protected or studied
+```
+
+This makes SWs and UOs a pair of positive and negative controls for studying information transport in LLMs. SWs point toward live scalar routes; UOs point toward large but weak or abandoned scalar routes that can still affect numerical representations.
 
 ## Why Quantization Appears Here
 
-Low-bit group quantization gives a concrete way to expose scalar mechanisms:
+Low-bit group quantization gives a concrete way to expose scalar effects. For a group of weights:
 
 ```text
 group scale = (max - min) / (2^bits - 1)
 ```
 
-A single frontier weight can set this scale for many neighboring weights. If removing that scalar improves the quantized model without hurting FP16, it suggests the weight is numerically dominant but not functionally load-bearing in the original model.
+A single frontier scalar can set the scale for many neighboring weights. If removing that scalar leaves the FP16 model intact but improves the perturbed model, the scalar is probably numerically dominant without being functionally load-bearing.
 
-That makes UOs complementary to SWs:
-
-- **SWs**: functionally load-bearing scalar weights.
-- **UOs**: numerically load-bearing scalar weights that may be safely removed under quantization.
-
-The contrast is the interpretability target.
+This is why the repository contains quantization utilities. They are perturbation tools for interpretability experiments, not a full quantization library.
 
 ## Setup
 
@@ -92,12 +78,7 @@ cd llm-quant-experiments
 pip install -r requirements.txt
 ```
 
-On Great Lakes, the configs expect local Qwen3 model folders under scratch:
-
-```text
-/scratch/huterer_root/huterer0/jiamingp/models/qwen3-1b7
-/scratch/huterer_root/huterer0/jiamingp/models/qwen3-8b
-```
+The scripts use Hugging Face `AutoModelForCausalLM` and `AutoTokenizer`. `model.name` in each config can be either a Hugging Face model ID or a local model directory.
 
 ## Usage
 
@@ -108,7 +89,7 @@ python scripts/run_uo_detection.py --config configs/qwen3_1b7.yaml
 python scripts/run_uo_detection.py --config configs/qwen3_8b.yaml
 ```
 
-**Run depthwise interpretability diagnostics:**
+**Run depthwise diagnostics:**
 
 ```bash
 python scripts/run_diagnostics.py \
@@ -117,25 +98,27 @@ python scripts/run_diagnostics.py \
     --output results/figures/depthwise_1b7.png
 ```
 
-**Great Lakes SLURM:**
+**SLURM:**
 
 ```bash
 sbatch scripts/slurm/uo_1b7.sbatch
 sbatch scripts/slurm/uo_8b.sbatch
 ```
 
+Edit the config and SLURM paths for your local cluster environment before submitting jobs.
+
 ## Repository Layout
 
 ```text
 quant_analysis/
-    quantize.py      low-bit group quantization used as the perturbation operator
+    quantize.py      group quantization perturbations
     detect.py        SW and UO scalar candidate detection
     metrics.py       PPL, delta-PPL, KL, EAR, and admission gates
     diagnostics.py   BOS norm, attention sink score, residual compression curves
 scripts/
     run_uo_detection.py   candidate discovery and admission pipeline
     run_diagnostics.py    depthwise comparison plots
-    slurm/                Great Lakes batch scripts
+    slurm/                example batch scripts
 configs/
     qwen3_1b7.yaml
     qwen3_8b.yaml
@@ -143,18 +126,9 @@ results/
     local outputs, ignored by git
 ```
 
-## Admission Criterion
+## Status
 
-A UO candidate is admitted only if both conditions hold:
-
-1. `delta_PPL_FP16 / baseline_PPL < 0.005`
-2. Quantized-model PPL improves after zeroing the candidate
-
-This gate is intentionally conservative: a candidate should be harmless in the original model and useful under the quantization perturbation.
-
-## Privacy Note
-
-This repository contains early experiment code, unpublished research framing, and detector strategy. Keep it private until the SW/UO detection results, calibration recipe, baselines, and interpretation claims are validated.
+This is an exploratory research repo. The current code is meant to support experiments and generate evidence, not to present final claims about Super Weights, Under-Outliers, or transformer mechanisms.
 
 ## References
 
