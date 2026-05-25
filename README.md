@@ -1,13 +1,14 @@
 # llm-quant-experiments
 
-Early research code for studying **Super Weights (SWs)** and **Under-Outliers (UOs)** as interpretable scalar mechanisms in Qwen3 language models.
+Private early research code for studying **Super Weights (SWs)** and **Under-Outliers (UOs)** as interpretable scalar mechanisms in Qwen3 language models.
 
 The working hypothesis is that a small number of individual weight coordinates can have outsized, mechanistically meaningful effects on model behavior. Quantization is used here as a controlled stress test: when low-bit compression perturbs a model, the weights that dominate group ranges, preserve attention sinks, or recover perplexity become useful probes into the model's internal computation.
 
+This repository should stay private while the SW/UO detection framework, calibration recipe, and interpretation claims are still being validated.
 
 ## Research Framing
 
-This project is not mainly a deployment quantization repo. It uses quantization because it creates a measurable perturbation that exposes unusually important scalar weights.
+This project is not mainly a deployment quantization repo. It uses quantization because it creates a measurable perturbation that exposes unusually important scalar weights. The near-term goal is a stronger detection framework for useful and not-useful weights under low-bit quantization.
 
 The central questions are:
 
@@ -17,10 +18,13 @@ The central questions are:
 2. **Which weights distort local numerical geometry?**
    Under-Outliers sit at the max/min frontier of a quantization group. They can dominate the group range while contributing little to FP16 behavior, making them useful probes for separating numerical artifacts from functional computation.
 
-3. **Do SW/UO interventions restore internal trajectories?**
+3. **Can we classify weights by causal damage and quantization cost?**
+   A Super Weight is high damage if removed and should be protected. A useful UO is low damage if removed but high cost if kept in the quantization grid.
+
+4. **Do SW/UO interventions restore internal trajectories?**
    Depthwise diagnostics compare BOS token norm, attention sink score, and residual-stream compression across FP16, low-bit baseline, and UO-zeroed variants.
 
-4. **Can scalar edits reveal mechanism rather than only improve PPL?**
+5. **Can scalar edits reveal mechanism rather than only improve PPL?**
    PPL, KL, and EAR are treated as external checks. The more interesting signal is whether small scalar interventions recover recognizable internal structure.
 
 ## What This Code Does
@@ -38,6 +42,30 @@ The central questions are:
 These curves test whether an intervention changes the internal computation in a coherent way.
 
 **Alpha sweeps** scale known Super Weights by `alpha` to test whether exact FP16 restoration is optimal, or whether the perturbed downstream computation prefers a different scalar value.
+
+## Current Detector Direction
+
+The intended detector is forward-only and endpoint-based:
+
+1. Use the actual production quantization groups.
+2. Shortlist range-frontier weights that affect group scale.
+3. Reject candidates that damage FP16 behavior.
+4. Admit only candidates that improve the final quantized model.
+5. Veto or stress-test candidates near known SW routes, sink-token behavior, or long-context-sensitive features.
+
+This is deliberately different from ranking weights only by magnitude, gradient, or Hessian proxy. The working criterion is:
+
+```text
+useful UO = FP16-harmless + quantization-useful
+```
+
+The framework can also be viewed as a residual decomposition:
+
+```text
+W_fp16 - W_q = SW-protected residual + UO-zeroed residual + normal quantized residual
+```
+
+The open question is whether the remaining residual has structure, such as channel concentration, low-rank directions, or sink-token-specific distortion.
 
 ## Why Quantization Appears Here
 
@@ -124,6 +152,9 @@ A UO candidate is admitted only if both conditions hold:
 
 This gate is intentionally conservative: a candidate should be harmless in the original model and useful under the quantization perturbation.
 
+## Privacy Note
+
+This repository contains early experiment code, unpublished research framing, and detector strategy. Keep it private until the SW/UO detection results, calibration recipe, baselines, and interpretation claims are validated.
 
 ## References
 
