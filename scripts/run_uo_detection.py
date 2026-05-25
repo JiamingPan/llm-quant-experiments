@@ -1,19 +1,17 @@
 """
-CLI entry point: UO detection pipeline on Qwen3.
+CLI entry point: UO scalar-mechanism detection pipeline on Qwen3.
 
 Usage:
     python scripts/run_uo_detection.py --config configs/qwen3_1b7.yaml
     python scripts/run_uo_detection.py --model-name /path/to/local/qwen3 --bits 3
-
-TODO (Codex): implement main() using the spec below.
 
 Pipeline:
     1. Load model + tokenizer from config or --model-name flag
     2. Load calibration texts from WikiText-2 (datasets library)
        n_samples=128, max_length=512
     3. Compute baseline FP16 PPL  -> print
-    4. Quantize all mlp layers at --bits with group_size=128
-    5. Compute baseline quantized PPL -> print
+    4. Apply the configured low-bit perturbation to model copies
+    5. Compute perturbed-model PPL -> print
     6. For each mlp layer (down_proj, gate_proj, up_proj):
          a. find_range_frontier_candidates(W, group_size=128)
          b. For each candidate (packet_size=1):
@@ -57,7 +55,7 @@ def main():
             cfg = yaml.safe_load(f) or {}
 
     model_cfg = cfg.get("model", {})
-    quant_cfg = cfg.get("quantization", {})
+    quant_cfg = cfg.get("perturbation", {})
     uo_cfg = cfg.get("detection", {}).get("uo", {})
     calibration_cfg = cfg.get("calibration", {})
     output_cfg = cfg.get("output", {})

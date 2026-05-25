@@ -4,7 +4,7 @@ model:
   torch_dtype: float16
   device_map: auto
 
-quantization:
+perturbation:
   bits: 2
   group_size: 128
   symmetric: false

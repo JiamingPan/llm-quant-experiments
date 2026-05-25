@@ -1,18 +1,18 @@
 """
-Depthwise diagnostic curves for comparing FP16 vs quantized models.
+Depthwise diagnostic curves for comparing FP16 vs perturbed models.
 
 Three signals per layer:
     bos_norm:    L2 norm of BOS token hidden state — tracks attention sink strength
     sink_score:  mean max attention weight on BOS across heads — direct sink measure
-    rep_entropy: top singular value fraction of residual stream — compression proxy
+    rep_entropy: top singular value fraction of residual stream — concentration proxy
 
 These curves distinguish whether UO zeroing recovers PPL by actually restoring
-the sink/compression trajectory, or just by accident.
+the sink/concentration trajectory, or just by accident.
 
 Alpha sweep:
     Tests W_sw -> alpha * W_sw for alpha in {0.8, 0.9, 1.0, 1.1, 1.2}.
     Finds whether static FP16 restoration (alpha=1.0) is optimal or whether
-    the quantized downstream Jacobian prefers a different scale.
+    the perturbed downstream Jacobian prefers a different scale.
 
 TODO (Codex): implement the three functions below.
 See the full spec in the Codex prompt.

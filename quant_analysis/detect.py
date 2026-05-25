@@ -3,8 +3,8 @@ UO (under-outlier) and super weight detection.
 
 UO detection strategy:
     Range-frontier: a weight is a UO candidate if it sits at the max or min
-    of its quantization group (i.e., it determines the group scale).
-    Zeroing it would reduce the group dynamic range and improve quantization
+    of its local group (i.e., it determines the group scale).
+    Zeroing it would reduce the group dynamic range and improve the perturbation
     for all other weights in the group.
 
 Super weight detection:
@@ -32,7 +32,7 @@ def find_range_frontier_candidates(
 
     Args:
         W:          (out_features, in_features) float tensor
-        group_size: columns per quantization group
+        group_size: columns per local group
 
     Returns:
         list of dicts sorted by scale_reduction descending:

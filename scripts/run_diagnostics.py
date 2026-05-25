@@ -1,5 +1,5 @@
 """
-CLI entry point: depthwise diagnostic plots.
+CLI entry point: depthwise scalar-mechanism diagnostic plots.
 
 Usage:
     python scripts/run_diagnostics.py --config configs/qwen3_1b7.yaml
@@ -7,12 +7,10 @@ Usage:
         --uo-path results/uo_candidates.json \
         --output results/figures/depthwise_1b7.png
 
-TODO (Codex): implement main() using the spec below.
-
 Pipeline:
     1. Load FP16 model
-    2. Load quantized model (apply group quantization)
-    3. If --uo-path given, load admitted UOs and apply zeroing to quantized model
+    2. Load a perturbed model copy
+    3. If --uo-path given, load admitted UOs and apply zeroing to the perturbed copy
     4. Fixed test string (use a 200-token excerpt from WikiText-2 test set)
     5. Run compute_depthwise_diagnostics on all three variants:
          fp16, w2_baseline, w2_uo_zeroed
@@ -50,7 +48,7 @@ def main():
             cfg = yaml.safe_load(f) or {}
 
     model_cfg = cfg.get("model", {})
-    quant_cfg = cfg.get("quantization", {})
+    quant_cfg = cfg.get("perturbation", {})
     eval_cfg = cfg.get("eval", {})
     output_cfg = cfg.get("output", {})
 

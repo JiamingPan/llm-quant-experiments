@@ -1,6 +1,6 @@
 """
-Asymmetric per-group weight quantization.
-No external quantization libraries — pure PyTorch.
+Asymmetric per-group low-bit weight mapping.
+No external low-bit libraries — pure PyTorch.
 
 TODO (Codex): implement the three functions below.
 See the full spec in the Codex prompt.
@@ -17,15 +17,15 @@ def quantize_tensor(
     group_size: int = 128,
 ) -> tuple:
     """
-    Asymmetric per-group quantization of weight matrix W.
+    Asymmetric per-group low-bit mapping of weight matrix W.
 
     Args:
         W:          (out_features, in_features) float tensor
-        bits:       quantization bit-width (2 or 3 typical)
-        group_size: number of columns per quantization group
+        bits:       bit-width (2 or 3 typical)
+        group_size: number of columns per local group
 
     Returns:
-        W_q:        dequantized float tensor, same shape as W
+        W_q:        reconstructed float tensor, same shape as W
         scales:     (out_features, n_groups) float tensor
         zero_points:(out_features, n_groups) int tensor, clamped [0, 2^bits-1]
         W_int:      (out_features, in_features) int tensor [0, 2^bits-1]
@@ -91,8 +91,8 @@ def quantize_model_weights(
 
     Args:
         model:       HuggingFace transformer model (eval mode)
-        bits:        quantization bit-width
-        group_size:  group size for per-group quantization
+        bits:        bit-width
+        group_size:  group size for per-group mapping
         layer_names: if given, only quantize these named layers
 
     Returns:
@@ -116,7 +116,7 @@ def compute_quantization_error(
     W_q: torch.Tensor,
 ) -> dict:
     """
-    Quantization error statistics between original and dequantized weights.
+    Error statistics between original and reconstructed weights.
 
     Returns dict with keys:
         'mse':          mean squared error

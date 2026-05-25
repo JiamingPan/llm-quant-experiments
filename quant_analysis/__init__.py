@@ -2,7 +2,7 @@
 quant_analysis: forward-pass scalar interpretability tools for SW/UO studies.
 
 Modules:
-    quantize    - group quantization perturbations used to expose scalar effects
+    quantize    - controlled numeric perturbations used to expose scalar effects
     detect      - range-frontier UO detection, super weight detection
     metrics     - delta-PPL, KL divergence, EAR, UO admission gating
     diagnostics - depthwise BOS norm, attention sink score, rep entropy

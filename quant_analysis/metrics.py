@@ -1,17 +1,17 @@
 """
-Evaluation metrics for quantization analysis.
+Evaluation metrics for scalar perturbation analysis.
 
 Key metrics:
     - Perplexity (PPL): standard language model quality metric
     - Delta-PPL: PPL change under weight interventions (UO zeroing / SW scaling)
-    - KL divergence: KL(FP16 || quantized) averaged over tokens
+    - KL divergence: KL(FP16 || perturbed) averaged over tokens
     - EAR (Expected Acceptance Rate): fraction of tokens where FP16 and
-      quantized model agree on argmax. EAR >= 0.99 ~ distribution-lossless.
+      perturbed model agree on argmax. EAR >= 0.99 ~ distribution-lossless.
 
 UO admission gate:
     Admit candidate if:
         (1) relative FP16 PPL damage < fp16_budget  (FP16-harmless)
-        (2) quantized model PPL improves after zeroing (Q-useful)
+        (2) perturbed model PPL improves after zeroing (Q-useful)
 
 IMPORTANT implementation note for compute_delta_ppl:
     Save original weight value, patch, compute PPL, restore.
@@ -326,14 +326,14 @@ def gate_uo_candidate(
 
     Admit if both conditions hold:
         (1) relative FP16 PPL damage < fp16_budget
-        (2) quantized model PPL improves after zeroing
+        (2) perturbed model PPL improves after zeroing
 
     Args:
         model:       FP16 model
         layer_name:  e.g. 'model.layers.3.mlp.down_proj'
         row, col:    weight coordinate
         baseline_ppl:FP16 PPL before any intervention
-        model_q_ppl: quantized model PPL before zeroing this candidate
+        model_q_ppl: perturbed model PPL before zeroing this candidate
         fp16_budget: max allowable relative damage (default 0.5%)
 
     Returns:
@@ -374,7 +374,7 @@ def gate_uo_candidate(
     elif relative_fp16_damage >= fp16_budget:
         reason = "rejected: FP16 damage exceeds budget"
     else:
-        reason = "rejected: quantized PPL did not improve"
+        reason = "rejected: perturbed-model PPL did not improve"
 
     return {
         "admitted": bool(admitted),
