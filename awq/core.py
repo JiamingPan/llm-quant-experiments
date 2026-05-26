@@ -267,18 +267,24 @@ def apply_awq_to_model(
     group_size=128,
     zero_point=True,
     n_grid=20,
+    progress=False,
 ):
     """
     Replace selected Linear weights with AWQ dequantized weights.
     """
     selected = set(layer_names) if layer_names is not None else set(input_buffers.keys())
     results = {}
+    modules = [
+        (name, module) for name, module in model.named_modules()
+        if name in selected and name in input_buffers and isinstance(module, nn.Linear)
+    ]
+    iterator = modules
+    if progress:
+        from tqdm import tqdm
+
+        iterator = tqdm(modules, desc="AWQ scale search", unit="layer")
     with torch.no_grad():
-        for name, module in model.named_modules():
-            if name not in selected or name not in input_buffers:
-                continue
-            if not isinstance(module, nn.Linear):
-                continue
+        for name, module in iterator:
             result = awq_linear_weight(
                 module,
                 input_buffers[name],
