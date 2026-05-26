@@ -18,8 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from awq.core import collect_linear_inputs, pseudo_quantize_tensor
+from awq.core import collect_linear_inputs
 from weight_handles.strata import flatten_strata, load_strata
+from weight_handles.uo import evaluate_candidate, top_abs_candidate
 
 
 MODEL_PATH = "/scratch/huterer_root/huterer0/jiamingp/models/qwen3-1b7"
@@ -58,36 +59,6 @@ def load_model(model_name: str) -> tuple[Any, Any]:
     return model, tokenizer
 
 
-def local_error(W_ref: torch.Tensor, W_test: torch.Tensor, X: torch.Tensor) -> tuple[float, float]:
-    assert W_ref.ndim == 2
-    assert W_test.shape == W_ref.shape
-    assert X.ndim == 2
-    assert X.shape[1] == W_ref.shape[1]
-
-    # explanation: squared error is a cheap local proxy for full-model KL; it asks
-    # whether this layer's output vector changes on real activation inputs.
-    y_ref = X.float() @ W_ref.float().t()
-    y_diff = X.float() @ (W_test.float() - W_ref.float()).t()
-    numerator = y_diff.pow(2).sum(dim=1).mean()
-
-    # explanation: the denominator makes groups comparable even if their normal
-    # output energy is very different; eta avoids division by zero.
-    denominator = y_ref.pow(2).sum(dim=1).mean() + ETA
-    return float((numerator / denominator).item()), float(denominator.item())
-
-
-def zero_packet(W_group: torch.Tensor, row: int, local_col: int) -> torch.Tensor:
-    assert W_group.ndim == 2
-    assert 0 <= row < W_group.shape[0]
-    assert 0 <= local_col < W_group.shape[1]
-
-    # explanation: Z_P(W) means "the same weights, except packet P is set to zero";
-    # here the packet P is just one candidate scalar in this v0 experiment.
-    W_zero = W_group.clone()
-    W_zero[row, local_col] = 0.0
-    return W_zero
-
-
 def evaluate_group(
     W: torch.Tensor,
     X: torch.Tensor,
@@ -97,51 +68,19 @@ def evaluate_group(
     start = group_index * group_size
     end = min(start + group_size, W.shape[1])
     W_group = W[:, start:end].detach().float()
-    X_group = X[:, start:end].detach().float()
-    assert W_group.shape[1] == X_group.shape[1]
+    assert X[:, start:end].shape[1] == W_group.shape[1]
     assert W_group.shape[1] <= group_size
-
-    flat_index = int(torch.argmax(W_group.abs()).item())
-    row = flat_index // W_group.shape[1]
-    local_col = flat_index % W_group.shape[1]
-    col = start + local_col
-    weight_value = float(W_group[row, local_col].item())
-    max_abs_before = float(W_group.abs().max().item())
-
-    W_zero = zero_packet(W_group, row, local_col)
-    max_abs_after = float(W_zero.abs().max().item())
 
     # explanation: groupwise quantization means each contiguous block of input
     # columns gets its own low-bit grid; group_size controls how many columns
     # share that grid, so one extreme value can affect many neighboring weights.
-    # explanation: zero_point=True means the low-bit grid is allowed to shift,
-    # so it can cover asymmetric min/max values instead of being centered at 0.
-    W_q_empty = pseudo_quantize_tensor(W_group, n_bits=N_BITS, group_size=group_size, zero_point=True).float()
-    W_q_zero = pseudo_quantize_tensor(W_zero, n_bits=N_BITS, group_size=group_size, zero_point=True).float()
-
-    E_empty, denom = local_error(W_group, W_q_empty, X_group)
-    E_zero, _ = local_error(W_group, W_q_zero, X_group)
-
-    # explanation: B_g is positive when deleting the packet makes the low-bit
-    # version closer to the original FP16 layer on the observed activations.
-    B_g = E_empty - E_zero
-
-    # explanation: A_local ignores quantization and measures whether FP16 itself
-    # needed the deleted weight; small A means deletion barely changes this layer.
-    A_local, _ = local_error(W_group, W_zero, X_group)
-    score = B_g / (A_local + ETA)
-
-    return {
-        "layer": DEFAULT_LAYER,
-        "group": int(group_index), "row": int(row), "col": int(col), "local_col": int(local_col),
-        "weight_value": float(weight_value),
-        "weight_magnitude": float(abs(weight_value)),
-        "group_start_col": int(start), "group_end_col": int(end),
-        "max_abs_before": max_abs_before, "max_abs_after": max_abs_after,
-        "E_empty": float(E_empty), "E_zeroed": float(E_zero),
-        "B_g": float(B_g), "A_local_g": float(A_local), "score_g": float(score),
-        "denominator": float(denom), "n_bits": N_BITS, "group_size": group_size, "zero_point": True,
-    }
+    row, local_col = top_abs_candidate(W_group)
+    # explanation: v0 deliberately tests the simplest packet rule: zero the
+    # single largest-magnitude scalar in each group and measure B versus A.
+    return evaluate_candidate(
+        W, X, DEFAULT_LAYER, group_index, row, local_col, rule="v0_top_abs",
+        group_size=group_size, n_bits=N_BITS, zero_point=True, eta=ETA,
+    )
 
 
 def save_scatter(records: list[dict[str, Any]], output_fig: str) -> None:

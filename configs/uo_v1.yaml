@@ -1,0 +1,14 @@
+model:
+  name: /scratch/huterer_root/huterer0/jiamingp/models/qwen3-1b7
+
+rfic_v1:
+  layers:
+    - model.layers.7.mlp.down_proj
+    - model.layers.14.mlp.down_proj
+    - model.layers.20.mlp.down_proj
+  max_tokens: 512
+  max_length: 512
+  output_dir: results
+  figure_dir: results/figures
+  summary_csv: results/uo_v1_summary.csv
+  combined_fig: results/figures/uo_v1_all_layers_all_rules.png
