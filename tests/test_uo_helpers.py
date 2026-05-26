@@ -1,6 +1,12 @@
 import torch
 
-from weight_handles.uo import evaluate_candidate, layer_slug, local_relative_error, top_abs_candidate
+from weight_handles.uo import (
+    evaluate_candidate,
+    layer_slug,
+    local_relative_error,
+    temporary_weight_replacements,
+    top_abs_candidate,
+)
 
 
 def test_local_relative_error_zero_when_weights_match():
@@ -30,3 +36,12 @@ def test_evaluate_candidate_returns_expected_keys():
 
 def test_layer_slug_qwen_layer_name():
     assert layer_slug("model.layers.14.mlp.down_proj") == "layer14_down_proj"
+
+
+def test_temporary_weight_replacements_restores_original():
+    model = torch.nn.Sequential(torch.nn.Linear(3, 2, bias=False))
+    original = model.get_submodule("0").weight.detach().clone()
+    replacement = torch.ones_like(original)
+    with temporary_weight_replacements(model, {"0": replacement}):
+        assert torch.equal(model.get_submodule("0").weight, replacement)
+    assert torch.equal(model.get_submodule("0").weight, original)

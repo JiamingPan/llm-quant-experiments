@@ -2,6 +2,7 @@
 Local RFIC scoring helpers shared by v0/v1 scripts.
 """
 
+from contextlib import contextmanager
 from typing import Any
 
 import torch
@@ -107,3 +108,23 @@ def layer_slug(layer_name: str) -> str:
     if len(parts) >= 5 and parts[0] == "model" and parts[1] == "layers":
         return f"layer{parts[2]}_{parts[-1]}"
     return layer_name.replace(".", "_")
+
+
+@contextmanager
+def temporary_weight_replacements(model: Any, replacements: dict[str, torch.Tensor]):
+    """
+    Temporarily replace full weight tensors, restoring originals in finally.
+    """
+    originals = []
+    try:
+        with torch.no_grad():
+            for layer_name, new_weight in replacements.items():
+                weight = model.get_submodule(layer_name).weight
+                original = weight.data.detach().clone()
+                originals.append((weight, original))
+                weight.data.copy_(new_weight.to(device=weight.device, dtype=weight.dtype))
+        yield
+    finally:
+        with torch.no_grad():
+            for weight, original in reversed(originals):
+                weight.data.copy_(original.to(device=weight.device, dtype=weight.dtype))

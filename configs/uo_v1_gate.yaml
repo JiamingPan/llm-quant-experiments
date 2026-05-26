@@ -1,0 +1,19 @@
+model:
+  name: /scratch/huterer_root/huterer0/jiamingp/models/qwen3-1b7
+
+rfic_v1_gate:
+  results_dir: results
+  layers:
+    - model.layers.7.mlp.down_proj
+    - model.layers.14.mlp.down_proj
+    - model.layers.20.mlp.down_proj
+  rules:
+    - ruleB
+    - ruleC
+  top_k_per_layer_rule: 5
+  max_length: 512
+  batch_size: 1
+  tail_fraction: 0.05
+  output_json: results/uo_v1_gate.json
+  output_csv: results/uo_v1_gate.csv
+  output_fig: results/figures/uo_v1_gate.png

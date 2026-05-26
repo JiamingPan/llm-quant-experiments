@@ -368,6 +368,7 @@ def main() -> None:
         all_results[layer_name] = rule_records
 
         slug = layer_slug(layer_name)
+        write_json(output_dir / f"uo_v1_{slug}_v0_top_abs.json", baseline)
         for rule in RULES:
             json_path = output_dir / f"uo_v1_{slug}_{rule}.json"
             write_json(json_path, rule_records[rule])
