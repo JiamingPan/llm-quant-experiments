@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Run the Causal Feature-Handle Test on a public language model.
+Run the scalar weight-outlier measurement harness on a public language model.
 """
 
 import argparse
@@ -33,7 +33,7 @@ from weight_handles.taxonomy import classify_results
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Causal Feature-Handle Test")
+    parser = argparse.ArgumentParser(description="Scalar weight-outlier measurement harness")
     parser.add_argument("--config", default="configs/qwen3_1b7.yaml")
     parser.add_argument("--model-name", default=None)
     parser.add_argument("--output", default="results/feature_handles.json")

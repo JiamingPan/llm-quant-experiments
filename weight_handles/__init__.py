@@ -1,5 +1,5 @@
 """
-Mechanistic interpretability tools for scalar weight-handle experiments.
+Forward-pass measurement tools for scalar weight-outlier experiments.
 """
 
 from .ablation import (

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Create taxonomy tables and summary figures from feature-handle results.
+Create taxonomy tables and summary figures from weight-outlier results.
 """
 
 import argparse
@@ -17,7 +17,7 @@ from weight_handles.taxonomy import classify_results, taxonomy_counts
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Build feature-handle report artifacts")
+    parser = argparse.ArgumentParser(description="Build weight-outlier report artifacts")
     parser.add_argument("--input", default="results/feature_handles.json")
     parser.add_argument("--table", default="results/tables/feature_handle_taxonomy.csv")
     parser.add_argument("--figure", default="results/figures/feature_handle_taxonomy.png")
@@ -80,7 +80,7 @@ def main():
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.bar(labels, values, color="#4C78A8")
     ax.set_ylabel("Candidates")
-    ax.set_title("Feature-Handle Taxonomy")
+    ax.set_title("Weight-Outlier Taxonomy")
     ax.tick_params(axis="x", rotation=25)
     fig.tight_layout()
     fig.savefig(figure_path)

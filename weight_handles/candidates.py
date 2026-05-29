@@ -1,5 +1,5 @@
 """
-Deterministic candidate selection for scalar feature-handle experiments.
+Deterministic candidate selection for scalar weight-outlier measurement.
 
 Known Super Weight coordinates can be supplied from config lists following
 Yu et al. 2024, arXiv:2411.07191.

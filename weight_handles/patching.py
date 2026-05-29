@@ -1,5 +1,5 @@
 """
-Patch-back and spreadability tests for scalar feature handles.
+Patch-back and spreadability tests for scalar weight-outlier interventions.
 """
 
 from contextlib import contextmanager

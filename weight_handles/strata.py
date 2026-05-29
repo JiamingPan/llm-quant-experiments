@@ -1,5 +1,5 @@
 """
-Public prompt strata for feature-handle evaluation.
+Public prompt strata for scalar weight-outlier evaluation.
 """
 
 
